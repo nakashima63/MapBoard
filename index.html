@@ -7,7 +7,26 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <header class="header">
+    <h1 class="header__title">MapBoard</h1>
+    <button class="btn btn--primary" id="btn-add-spot">+ スポットを追加</button>
+  </header>
+
+  <main class="main">
+    <section class="filter-bar">
+      <input type="text" class="input input--search" id="filter-input" placeholder="スポットを絞り込む...">
+      <select class="select" id="filter-category">
+        <option value="">すべてのカテゴリ</option>
+      </select>
+    </section>
+
+    <section class="spot-grid" id="spot-grid">
+      <!-- カードはJS(app.js)で動的に生成 -->
+    </section>
+  </main>
+
   <script src="js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/remotestoragejs@latest/release/stable/remotestorage.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/places.js"></script>
   <script src="js/app.js"></script>
