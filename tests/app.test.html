@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>app.js テスト</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #111; color: #eee; }
+    .pass { color: #4caf50; }
+    .fail { color: #f44336; }
+    .info { color: #90caf9; }
+    h1 { color: #fff; }
+    #log { white-space: pre-wrap; line-height: 1.8; }
+  </style>
+</head>
+<body>
+  <h1>app.js テスト（ロジック単体）</h1>
+  <div id="log"></div>
+
+  <script>
+    const log = document.getElementById('log');
+    let passed = 0, failed = 0;
+    const print = (msg, cls = '') => {
+      const el = document.createElement('div');
+      el.className = cls; el.textContent = msg; log.appendChild(el);
+    };
+    const assert = (label, cond) => {
+      if (cond) { print(`✓ ${label}`, 'pass'); passed++; }
+      else       { print(`✗ ${label}`, 'fail'); failed++; }
+    };
+
+    // ===== app.js から抽出したロジック関数のテスト =====
+    // app.js 本体はDOM依存があるため、ここでは純粋なロジック部分を切り出してテスト
+
+    // --- _escape のテスト ---
+    const _escape = (str) => String(str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    print('=== _escape() XSS対策テスト ===\n', 'info');
+    assert('& をエスケープ', _escape('a & b') === 'a &amp; b');
+    assert('< をエスケープ', _escape('<script>') === '&lt;script&gt;');
+    assert('"  をエスケープ', _escape('"hello"') === '&quot;hello&quot;');
+    assert('数値を文字列化', _escape(123) === '123');
+    assert('通常の文字列はそのまま', _escape('カフェ') === 'カフェ');
+
+    // --- _buildCardHtml のテスト ---
+    const _buildCardHtml = (spot) => {
+      const badge = spot.visited
+        ? '<span class="badge badge--visited">訪問済み</span>'
+        : '<span class="badge badge--unvisited">未訪問</span>';
+      const category = spot.category
+        ? `<span class="card__category">${_escape(spot.category)}</span>` : '';
+      const memo = spot.memo
+        ? `<p class="card__memo">${_escape(spot.memo)}</p>` : '';
+      return `
+        <a class="card" href="detail.html?id=${encodeURIComponent(spot.place_id)}">
+          <div class="card__header">
+            <span class="card__name">${_escape(spot.name)}</span>
+            ${category}
+          </div>
+          ${memo}
+          <div class="card__footer">
+            ${badge}
+            <span class="card__date">${spot.saved_at || ''}</span>
+          </div>
+        </a>`;
+    };
+
+    print('\n=== _buildCardHtml() テスト ===\n', 'info');
+
+    const spot = { place_id: 'ChIJ001', name: 'テストカフェ', category: 'カフェ', memo: 'おすすめ', visited: false, saved_at: '2026-05-24' };
+    const html = _buildCardHtml(spot);
+    assert('カードにplace_idのリンクが含まれる', html.includes('detail.html?id=ChIJ001'));
+    assert('カードにスポット名が含まれる', html.includes('テストカフェ'));
+    assert('カードにカテゴリが含まれる', html.includes('カフェ'));
+    assert('カードにメモが含まれる', html.includes('おすすめ'));
+    assert('未訪問バッジが含まれる', html.includes('badge--unvisited'));
+    assert('日付が含まれる', html.includes('2026-05-24'));
+
+    const visitedSpot = { ...spot, visited: true };
+    const visitedHtml = _buildCardHtml(visitedSpot);
+    assert('訪問済みバッジが含まれる', visitedHtml.includes('badge--visited'));
+
+    const noMemoSpot = { place_id: 'ChIJ002', name: '名前のみ', category: '', memo: '', visited: false, saved_at: '' };
+    const noMemoHtml = _buildCardHtml(noMemoSpot);
+    assert('メモなしのとき card__memo が含まれない', !noMemoHtml.includes('card__memo'));
+    assert('カテゴリなしのとき card__category が含まれない', !noMemoHtml.includes('card__category'));
+
+    const xssSpot = { place_id: 'ChIJ003', name: '<script>alert(1)<' + '/script>', category: '&カテゴリ', memo: '"メモ"', visited: false, saved_at: '' };
+    const xssHtml = _buildCardHtml(xssSpot);
+    assert('nameのXSSがエスケープされる', !xssHtml.includes('<script>') && xssHtml.includes('&lt;script&gt;'));
+    assert('categoryのXSSがエスケープされる', xssHtml.includes('&amp;カテゴリ'));
+    assert('memoのXSSがエスケープされる', xssHtml.includes('&quot;メモ&quot;'));
+
+    // --- フィルタリングロジックのテスト ---
+    print('\n=== フィルタリングロジック テスト ===\n', 'info');
+
+    const allSpots = {
+      'id1': { place_id: 'id1', name: '渋谷カフェ', category: 'カフェ', memo: '美味しい', visited: false, saved_at: '2026-01-01' },
+      'id2': { place_id: 'id2', name: '新宿レストラン', category: 'レストラン', memo: '', visited: true, saved_at: '2026-02-01' },
+      'id3': { place_id: 'id3', name: '池袋カフェ', category: 'カフェ', memo: 'おすすめ', visited: false, saved_at: '2026-03-01' },
+    };
+
+    const applyFilter = (spots, keyword, category) => Object.fromEntries(
+      Object.entries(spots).filter(([, spot]) => {
+        const matchKeyword = !keyword ||
+          spot.name.toLowerCase().includes(keyword) ||
+          (spot.memo || '').toLowerCase().includes(keyword);
+        const matchCategory = !category || spot.category === category;
+        return matchKeyword && matchCategory;
+      })
+    );
+
+    const allResult = applyFilter(allSpots, '', '');
+    assert('フィルターなしは全件返る', Object.keys(allResult).length === 3);
+
+    const keywordResult = applyFilter(allSpots, '渋谷', '');
+    assert('キーワード「渋谷」で1件に絞り込まれる', Object.keys(keywordResult).length === 1);
+    assert('「渋谷カフェ」が含まれる', 'id1' in keywordResult);
+
+    const memoResult = applyFilter(allSpots, 'おすすめ', '');
+    assert('メモのキーワードでも絞り込める', Object.keys(memoResult).length === 1 && 'id3' in memoResult);
+
+    const categoryResult = applyFilter(allSpots, '', 'カフェ');
+    assert('カテゴリ「カフェ」で2件に絞り込まれる', Object.keys(categoryResult).length === 2);
+
+    const combinedResult = applyFilter(allSpots, '渋谷', 'カフェ');
+    assert('キーワード＋カテゴリの複合フィルター', Object.keys(combinedResult).length === 1 && 'id1' in combinedResult);
+
+    const noResult = applyFilter(allSpots, '存在しない', '');
+    assert('マッチなしは0件', Object.keys(noResult).length === 0);
+
+    // --- 重複チェックロジックのテスト ---
+    print('\n=== 重複チェック テスト ===\n', 'info');
+
+    const isDuplicate = (allSpots, placeId) => placeId in allSpots;
+    assert('既登録place_idは重複と判定', isDuplicate(allSpots, 'id1'));
+    assert('未登録place_idは重複でない', !isDuplicate(allSpots, 'id_new'));
+
+    // --- カテゴリ一覧生成のテスト ---
+    print('\n=== カテゴリ一覧生成 テスト ===\n', 'info');
+
+    const getCategories = (spots) =>
+      [...new Set(Object.values(spots).map(s => s.category).filter(Boolean))].sort();
+
+    const categories = getCategories(allSpots);
+    assert('カテゴリが重複なく取得できる', categories.length === 2);
+    assert('カテゴリがソートされる', categories[0] === 'カフェ' && categories[1] === 'レストラン');
+
+    const emptyCategories = getCategories({ 'id': { category: '' } });
+    assert('カテゴリなしのスポットは含まれない', emptyCategories.length === 0);
+
+    print(`\n=== 結果: ${passed} 件 OK / ${failed} 件 NG ===`, failed === 0 ? 'pass' : 'fail');
+  </script>
+</body>
+</html>
