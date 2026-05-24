@@ -7,7 +7,25 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <header class="header">
+    <a href="index.html" class="btn btn--back">← 一覧に戻る</a>
+    <h1 class="header__title">Google Takeout インポート</h1>
+  </header>
+
+  <main class="main">
+    <section class="import-section">
+      <p class="description">Google TakeoutからエクスポートしたJSONファイルを選択してください。</p>
+      <label class="label" for="file-input">JSONファイルを選択</label>
+      <input type="file" class="input" id="file-input" accept=".json">
+      <div class="import-preview" id="import-preview">
+        <!-- プレビューはJS(import.js)で動的に生成 -->
+      </div>
+      <button class="btn btn--primary" id="btn-import" disabled>インポートする</button>
+    </section>
+  </main>
+
   <script src="js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/remotestoragejs@latest/release/stable/remotestorage.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/import.js"></script>
 </body>

@@ -7,7 +7,32 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <header class="header">
+    <a href="index.html" class="btn btn--back">← 一覧に戻る</a>
+    <h1 class="header__title" id="spot-name">スポット詳細</h1>
+  </header>
+
+  <main class="main">
+    <section class="detail-map" id="map">
+      <!-- Google Maps JS APIで地図を埋め込み -->
+    </section>
+
+    <section class="detail-info" id="detail-info">
+      <!-- Places APIの情報をJS(detail.js)で動的に生成 -->
+    </section>
+
+    <section class="detail-edit">
+      <h2 class="section-title">メモ・カテゴリ</h2>
+      <label class="label" for="edit-category">カテゴリ</label>
+      <input type="text" class="input" id="edit-category" placeholder="カテゴリを入力...">
+      <label class="label" for="edit-memo">メモ</label>
+      <textarea class="textarea" id="edit-memo" placeholder="メモを入力..."></textarea>
+      <button class="btn btn--primary" id="btn-save">保存する</button>
+    </section>
+  </main>
+
   <script src="js/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/remotestoragejs@latest/release/stable/remotestorage.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/places.js"></script>
   <script src="js/detail.js"></script>
