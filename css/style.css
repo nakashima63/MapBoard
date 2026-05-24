@@ -30,6 +30,9 @@
   padding: 0;
 }
 
+/* hidden属性をCSSのdisplayで上書きされないよう保護 */
+[hidden] { display: none !important; }
+
 html {
   font-size: 16px;
   -webkit-text-size-adjust: 100%;
@@ -520,4 +523,106 @@ img {
   justify-content: center;
   padding: var(--spacing-xl);
   color: var(--color-text-sub);
+}
+
+/* ===== モーダル ===== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 300;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: var(--spacing-md);
+}
+
+@media (min-width: 600px) {
+  .modal-overlay {
+    align-items: center;
+  }
+}
+
+.modal {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+@media (min-width: 600px) {
+  .modal {
+    border-radius: var(--radius-lg);
+  }
+}
+
+.modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.modal__title {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.modal__close {
+  width: var(--tap-min);
+  height: var(--tap-min);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--color-text-sub);
+  font-size: 1rem;
+  cursor: pointer;
+  border-radius: var(--radius);
+}
+
+.modal__close:hover {
+  background: var(--color-bg);
+}
+
+.modal__body {
+  padding: var(--spacing-md);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal__footer {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: flex-end;
+  padding: var(--spacing-md);
+  border-top: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+/* ===== 選択済みスポット表示 ===== */
+.selected-spot {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--spacing-sm) var(--spacing-md);
+  margin-top: var(--spacing-sm);
+}
+
+.selected-spot__name {
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+
+.selected-spot__address {
+  font-size: 0.8125rem;
+  color: var(--color-text-sub);
+  margin-top: 2px;
 }
