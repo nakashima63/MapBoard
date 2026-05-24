@@ -1,0 +1,54 @@
+name: GitHub Pages へデプロイ
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # シークレットから config.js を生成（APIキーをリポジトリに含めない）
+      - name: config.js を生成
+        env:
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
+        run: |
+          cat > js/config.js << 'JSEOF'
+          const CONFIG = {
+            MAPS_API_KEY: 'PLACEHOLDER',
+          };
+          JSEOF
+          # PLACEHOLDERをシークレットの値で置換（ヒアドキュ内では展開されないため）
+          sed -i "s/PLACEHOLDER/${MAPS_API_KEY}/" js/config.js
+
+      - name: GitHub Pages の設定
+        uses: actions/configure-pages@v5
+
+      - name: 成果物をアップロード（tests/ を除く）
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+          exclude: |
+            tests/
+            .github/
+            CLAUDE.md
+
+      - name: GitHub Pages へデプロイ
+        uses: actions/deploy-pages@v4
+        id: deployment
