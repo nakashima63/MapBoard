@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>places.js テスト</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #111; color: #eee; }
+    .pass { color: #4caf50; }
+    .fail { color: #f44336; }
+    .info { color: #90caf9; }
+    h1 { color: #fff; }
+    #log { white-space: pre-wrap; line-height: 1.8; }
+  </style>
+</head>
+<body>
+  <h1>places.js テスト</h1>
+  <div id="log"></div>
+
+  <!-- CONFIG モック（APIキー不要） -->
+  <script>
+    const CONFIG = { MAPS_API_KEY: 'TEST_KEY' };
+  </script>
+  <script src="../js/places.js"></script>
+  <script>
+    const log = document.getElementById('log');
+    let passed = 0, failed = 0;
+
+    const print = (msg, cls = '') => {
+      const el = document.createElement('div');
+      el.className = cls;
+      el.textContent = msg;
+      log.appendChild(el);
+    };
+
+    const assert = (label, cond) => {
+      if (cond) { print(`✓ ${label}`, 'pass'); passed++; }
+      else       { print(`✗ ${label}`, 'fail'); failed++; }
+    };
+
+    // --- fetch モック ---
+    const MOCK_SEARCH_RESPONSE = {
+      places: [
+        {
+          id: 'ChIJ_mock_001',
+          displayName: { text: 'モックカフェ', languageCode: 'ja' },
+          formattedAddress: '東京都渋谷区1-1-1',
+          types: ['cafe', 'food']
+        },
+        {
+          id: 'ChIJ_mock_002',
+          displayName: { text: 'モックレストラン', languageCode: 'ja' },
+          formattedAddress: '東京都新宿区2-2-2',
+          types: ['restaurant', 'food']
+        }
+      ]
+    };
+
+    const MOCK_DETAIL_RESPONSE = {
+      id: 'ChIJ_mock_001',
+      displayName: { text: 'モックカフェ', languageCode: 'ja' },
+      formattedAddress: '東京都渋谷区1-1-1',
+      internationalPhoneNumber: '+81-3-1234-5678',
+      rating: 4.2,
+      websiteUri: 'https://example.com',
+      location: { latitude: 35.6580, longitude: 139.7016 },
+      regularOpeningHours: {
+        weekdayDescriptions: ['月曜日: 9:00〜18:00', '火曜日: 9:00〜18:00']
+      },
+      photos: [
+        { name: 'places/ChIJ_mock_001/photos/photo1' },
+        { name: 'places/ChIJ_mock_001/photos/photo2' },
+        { name: 'places/ChIJ_mock_001/photos/photo3' },
+        { name: 'places/ChIJ_mock_001/photos/photo4' },
+        { name: 'places/ChIJ_mock_001/photos/photo5' },
+        { name: 'places/ChIJ_mock_001/photos/photo6' }
+      ]
+    };
+
+    const MOCK_EMPTY_RESPONSE = { places: [] };
+
+    let fetchCallLog = [];
+
+    const mockFetch = (responseBody, status = 200) => {
+      return (url, opts) => {
+        fetchCallLog.push({ url, opts });
+        return Promise.resolve({
+          ok: status === 200,
+          status,
+          statusText: status === 200 ? 'OK' : 'Error',
+          json: () => Promise.resolve(responseBody)
+        });
+      };
+    };
+
+    (async () => {
+      print('=== search() テスト ===\n', 'info');
+
+      // 1. テキスト検索の基本動作
+      fetchCallLog = [];
+      window.fetch = mockFetch(MOCK_SEARCH_RESPONSE);
+      const results = await PlacesModule.search('渋谷 カフェ');
+
+      assert('search が配列を返す', Array.isArray(results));
+      assert('検索結果が2件', results.length === 2);
+
+      const r0 = results[0];
+      assert('place_id フィールドがある', r0.place_id === 'ChIJ_mock_001');
+      assert('name フィールドがある', r0.name === 'モックカフェ');
+      assert('address フィールドがある', r0.address === '東京都渋谷区1-1-1');
+      assert('types フィールドがある', Array.isArray(r0.types) && r0.types.includes('cafe'));
+
+      // 2. リクエストのURLとヘッダーが正しい
+      const call = fetchCallLog[0];
+      assert('POST リクエストである', call.opts.method === 'POST');
+      assert('X-Goog-Api-Key ヘッダーがある', call.opts.headers['X-Goog-Api-Key'] === 'TEST_KEY');
+      assert('textQuery が body に含まれる', JSON.parse(call.opts.body).textQuery === '渋谷 カフェ');
+      assert('languageCode が ja', JSON.parse(call.opts.body).languageCode === 'ja');
+
+      // 3. 結果が空のときは空配列
+      window.fetch = mockFetch(MOCK_EMPTY_RESPONSE);
+      const empty = await PlacesModule.search('存在しない場所XYZ');
+      assert('結果なしは空配列', Array.isArray(empty) && empty.length === 0);
+
+      // 4. APIエラー時は例外
+      window.fetch = mockFetch({}, 403);
+      try {
+        await PlacesModule.search('エラーテスト');
+        assert('APIエラー時に例外が投げられる', false);
+      } catch (e) {
+        assert('APIエラー時に例外が投げられる', e.message === 'スポットの検索に失敗しました');
+      }
+
+      print('\n=== getDetail() テスト ===\n', 'info');
+
+      // 5. 詳細取得の基本動作
+      fetchCallLog = [];
+      window.fetch = mockFetch(MOCK_DETAIL_RESPONSE);
+      const detail = await PlacesModule.getDetail('ChIJ_mock_001');
+
+      assert('place_id フィールドがある', detail.place_id === 'ChIJ_mock_001');
+      assert('name フィールドがある', detail.name === 'モックカフェ');
+      assert('address フィールドがある', detail.address === '東京都渋谷区1-1-1');
+      assert('phone フィールドがある', detail.phone === '+81-3-1234-5678');
+      assert('rating フィールドがある', detail.rating === 4.2);
+      assert('website フィールドがある', detail.website === 'https://example.com');
+      assert('location フィールドがある', detail.location?.latitude === 35.6580);
+      assert('openingHours フィールドがある', Array.isArray(detail.openingHours));
+      assert('photos フィールドがある（最大5件）', Array.isArray(detail.photos) && detail.photos.length === 5);
+
+      // 6. リクエストのURLが正しい
+      const detailCall = fetchCallLog[0];
+      assert('GETリクエストのURLにplace_idが含まれる', detailCall.url.includes('ChIJ_mock_001'));
+      assert('X-Goog-Api-Key ヘッダーがある', detailCall.opts.headers['X-Goog-Api-Key'] === 'TEST_KEY');
+
+      // 7. オプションフィールドが null になる
+      window.fetch = mockFetch({ id: 'ChIJ_minimal', displayName: { text: '最小スポット' } });
+      const minimal = await PlacesModule.getDetail('ChIJ_minimal');
+      assert('phone が null（未設定時）', minimal.phone === null);
+      assert('rating が null（未設定時）', minimal.rating === null);
+      assert('photos が空配列（未設定時）', Array.isArray(minimal.photos) && minimal.photos.length === 0);
+
+      // 8. APIエラー時は例外
+      window.fetch = mockFetch({}, 404);
+      try {
+        await PlacesModule.getDetail('存在しないID');
+        assert('APIエラー時に例外が投げられる', false);
+      } catch (e) {
+        assert('APIエラー時に例外が投げられる', e.message === 'スポット情報の取得に失敗しました');
+      }
+
+      print('\n=== getPhotoUrl() テスト ===\n', 'info');
+
+      // 9. 写真URLの生成
+      const url = PlacesModule.getPhotoUrl('places/abc/photos/xyz');
+      assert('URLに photoName が含まれる', url.includes('places/abc/photos/xyz'));
+      assert('URLに APIキーが含まれる', url.includes('TEST_KEY'));
+      assert('URLに maxWidthPx が含まれる', url.includes('maxWidthPx=400'));
+
+      const urlCustom = PlacesModule.getPhotoUrl('places/abc/photos/xyz', 800);
+      assert('maxWidth を指定できる', urlCustom.includes('maxWidthPx=800'));
+
+      print(`\n=== 結果: ${passed} 件 OK / ${failed} 件 NG ===`, failed === 0 ? 'pass' : 'fail');
+    })();
+  </script>
+</body>
+</html>
