@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>storage.js テスト</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #111; color: #eee; }
+    .pass { color: #4caf50; }
+    .fail { color: #f44336; }
+    .info { color: #90caf9; }
+    h1 { color: #fff; }
+    #log { white-space: pre-wrap; line-height: 1.8; }
+  </style>
+</head>
+<body>
+  <h1>storage.js テスト</h1>
+  <div id="log"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/remotestoragejs@latest/release/stable/remotestorage.js"></script>
+  <script>
+    // --- テストランナー ---
+    const log = document.getElementById('log');
+    let passed = 0;
+    let failed = 0;
+
+    const print = (msg, cls = '') => {
+      const line = document.createElement('div');
+      line.className = cls;
+      line.textContent = msg;
+      log.appendChild(line);
+    };
+
+    const assert = (label, cond) => {
+      if (cond) {
+        print(`✓ ${label}`, 'pass');
+        passed++;
+      } else {
+        print(`✗ ${label}`, 'fail');
+        failed++;
+      }
+    };
+
+    const assertEq = (label, actual, expected) => {
+      const ok = JSON.stringify(actual) === JSON.stringify(expected);
+      if (ok) {
+        print(`✓ ${label}`, 'pass');
+        passed++;
+      } else {
+        print(`✗ ${label}  期待値: ${JSON.stringify(expected)}  実際: ${JSON.stringify(actual)}`, 'fail');
+        failed++;
+      }
+    };
+
+    // --- StorageModule のモック（remoteStorage.js を使わず純粋なロジックをテスト）---
+    // storage.js 本体は remoteStorage への接続が必要なため、
+    // ここではデータ変換・バリデーションロジックを独立してテストする。
+    const StorageModuleMock = (() => {
+      const store = {};
+
+      const _today = () => new Date().toISOString().slice(0, 10);
+
+      const getSpots = async () => ({ ...store });
+
+      const saveSpot = async (spot) => {
+        if (!spot.place_id) throw new Error('place_id が必要です');
+        store[spot.place_id] = {
+          ...spot,
+          saved_at: spot.saved_at || _today()
+        };
+      };
+
+      const deleteSpot = async (id) => {
+        delete store[id];
+      };
+
+      return { getSpots, saveSpot, deleteSpot };
+    })();
+
+    // --- テスト実行 ---
+    (async () => {
+      print('=== StorageModule ロジックテスト ===\n', 'info');
+
+      // 1. 初期状態は空
+      const empty = await StorageModuleMock.getSpots();
+      assert('初期状態はスポット0件', Object.keys(empty).length === 0);
+
+      // 2. スポットを保存できる
+      const spot1 = {
+        place_id: 'ChIJ_test_001',
+        name: 'テストカフェ',
+        category: 'カフェ',
+        memo: '美味しい',
+        visited: false
+      };
+      await StorageModuleMock.saveSpot(spot1);
+      const afterSave = await StorageModuleMock.getSpots();
+      assert('saveSpot後にスポットが1件になる', Object.keys(afterSave).length === 1);
+      assert('保存したスポットのnameが正しい', afterSave['ChIJ_test_001'].name === 'テストカフェ');
+      assert('saved_atが自動設定される', !!afterSave['ChIJ_test_001'].saved_at);
+      assert('saved_atの形式がYYYY-MM-DD', /^\d{4}-\d{2}-\d{2}$/.test(afterSave['ChIJ_test_001'].saved_at));
+
+      // 3. 複数スポットを保存できる
+      await StorageModuleMock.saveSpot({ place_id: 'ChIJ_test_002', name: '公園A', category: '公園', memo: '', visited: true });
+      const afterTwo = await StorageModuleMock.getSpots();
+      assert('2件保存後に2件取得できる', Object.keys(afterTwo).length === 2);
+
+      // 4. 既存スポットを上書き更新できる
+      await StorageModuleMock.saveSpot({ ...spot1, category: 'レストラン', memo: '更新済み' });
+      const afterUpdate = await StorageModuleMock.getSpots();
+      assertEq('カテゴリが更新される', afterUpdate['ChIJ_test_001'].category, 'レストラン');
+      assertEq('メモが更新される', afterUpdate['ChIJ_test_001'].memo, '更新済み');
+      assert('更新後も件数は変わらない', Object.keys(afterUpdate).length === 2);
+
+      // 5. place_id なしは例外
+      try {
+        await StorageModuleMock.saveSpot({ name: 'IDなしスポット' });
+        assert('place_id なし保存は例外を投げる', false);
+      } catch (e) {
+        assert('place_id なし保存は例外を投げる', e.message === 'place_id が必要です');
+      }
+
+      // 6. スポットを削除できる
+      await StorageModuleMock.deleteSpot('ChIJ_test_001');
+      const afterDelete = await StorageModuleMock.getSpots();
+      assert('deleteSpot後に1件になる', Object.keys(afterDelete).length === 1);
+      assert('削除したスポットが存在しない', !afterDelete['ChIJ_test_001']);
+
+      // 7. 全削除後は空
+      await StorageModuleMock.deleteSpot('ChIJ_test_002');
+      const afterAllDelete = await StorageModuleMock.getSpots();
+      assert('全削除後はスポット0件', Object.keys(afterAllDelete).length === 0);
+
+      // --- データスキーマ検証 ---
+      print('\n=== スキーマ検証テスト ===\n', 'info');
+
+      const full = {
+        place_id: 'ChIJ_schema_test',
+        name: 'スキーマテスト',
+        category: 'テスト',
+        memo: 'メモ',
+        visited: false,
+        saved_at: '2026-05-24'
+      };
+      await StorageModuleMock.saveSpot(full);
+      const saved = (await StorageModuleMock.getSpots())['ChIJ_schema_test'];
+      assert('place_id フィールドが存在する', 'place_id' in saved);
+      assert('name フィールドが存在する', 'name' in saved);
+      assert('category フィールドが存在する', 'category' in saved);
+      assert('memo フィールドが存在する', 'memo' in saved);
+      assert('visited フィールドが存在する', 'visited' in saved);
+      assert('saved_at フィールドが存在する', 'saved_at' in saved);
+      assert('visited は boolean', typeof saved.visited === 'boolean');
+
+      // --- 結果サマリー ---
+      print(`\n=== 結果: ${passed} 件 OK / ${failed} 件 NG ===`, failed === 0 ? 'pass' : 'fail');
+    })();
+  </script>
+</body>
+</html>
